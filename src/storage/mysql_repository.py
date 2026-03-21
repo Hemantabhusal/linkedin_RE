@@ -1,24 +1,21 @@
 import json
 from typing import Iterable, List
 
-import pymysql
-from pymysql.cursors import DictCursor
+import mysql.connector
 
-from linkedin_profile_scraper_python.config import Settings
-from linkedin_profile_scraper_python.models import PendingProfileRow, ProfileResult
+from config import Settings
+from models import PendingProfileRow, ProfileResult
 
 
 class MySQLRepository:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.connection = pymysql.connect(
+        self.connection = mysql.connector.connect(
             host=settings.db_host,
             port=settings.db_port,
             user=settings.db_user,
             password=settings.db_password,
             database=settings.db_name,
-            charset="utf8mb4",
-            cursorclass=DictCursor,
             autocommit=False,
         )
 
@@ -26,14 +23,14 @@ class MySQLRepository:
         self.connection.close()
 
     def reset_stuck_profiles(self) -> int:
-        with self.connection.cursor() as cursor:
+        with self.connection.cursor(dictionary=True) as cursor:
             cursor.execute("UPDATE profiles SET status = 'pending' WHERE status = 'in_progress'")
             affected = cursor.rowcount
         self.connection.commit()
         return affected
 
     def get_pending_profiles(self, limit: int) -> List[PendingProfileRow]:
-        with self.connection.cursor() as cursor:
+        with self.connection.cursor(dictionary=True) as cursor:
             cursor.execute(
                 "SELECT id, linkedin_url FROM profiles WHERE status = 'pending' ORDER BY id ASC LIMIT %s",
                 (limit,),
@@ -46,7 +43,7 @@ class MySQLRepository:
         if not ids:
             return
         placeholders = ", ".join(["%s"] * len(ids))
-        with self.connection.cursor() as cursor:
+        with self.connection.cursor(dictionary=True) as cursor:
             cursor.execute(
                 "UPDATE profiles SET status = 'in_progress' WHERE id IN (%s)" % placeholders,
                 tuple(ids),
@@ -54,12 +51,12 @@ class MySQLRepository:
         self.connection.commit()
 
     def mark_done(self, profile_id: int) -> None:
-        with self.connection.cursor() as cursor:
+        with self.connection.cursor(dictionary=True) as cursor:
             cursor.execute("UPDATE profiles SET status = 'done', error_msg = NULL WHERE id = %s", (profile_id,))
         self.connection.commit()
 
     def mark_error(self, profile_id: int, message: str) -> None:
-        with self.connection.cursor() as cursor:
+        with self.connection.cursor(dictionary=True) as cursor:
             cursor.execute(
                 "UPDATE profiles SET status = 'error', error_msg = %s WHERE id = %s",
                 (message[:500], profile_id),
@@ -137,7 +134,6 @@ class MySQLRepository:
             result.school_linkedin_url,
             experiences_json,
         )
-        with self.connection.cursor() as cursor:
+        with self.connection.cursor(dictionary=True) as cursor:
             cursor.execute(sql, values)
         self.connection.commit()
-

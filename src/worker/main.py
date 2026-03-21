@@ -1,9 +1,9 @@
-from linkedin_profile_scraper_python.client import LinkedInClient
-from linkedin_profile_scraper_python.config import get_settings
-from linkedin_profile_scraper_python.logging_setup import configure_logging, get_logger
-from linkedin_profile_scraper_python.scraper import ProfileScraper
-from linkedin_profile_scraper_python.storage import MySQLRepository
-from linkedin_profile_scraper_python.utils import SessionExpiredError, sleep_between, with_retry
+from client import LinkedInClient
+from config import get_settings
+from logging_setup import configure_logging, get_logger
+from scraper import ProfileScraper
+from storage import MySQLRepository
+from utils import SessionExpiredError, sleep_between, with_retry
 
 
 LOGGER = get_logger(__name__)
@@ -11,7 +11,7 @@ LOGGER = get_logger(__name__)
 
 def main() -> int:
     settings = get_settings()
-    configure_logging(settings.log_level)
+    configure_logging(settings.log_level, verbose=settings.verbose_logging)
 
     LOGGER.info("Connecting to MySQL...")
     repository = MySQLRepository(settings)
@@ -56,7 +56,7 @@ def main() -> int:
                     return 1
                 except Exception as exc:  # noqa: BLE001
                     repository.mark_error(row.id, str(exc))
-                    LOGGER.exception("  Error while scraping %s", row.linkedin_url)
+                    LOGGER.error("  Error while scraping %s: %s", row.linkedin_url, exc)
 
                 total_processed += 1
                 if index < len(profiles):
@@ -65,4 +65,3 @@ def main() -> int:
         return 0
     finally:
         repository.close()
-

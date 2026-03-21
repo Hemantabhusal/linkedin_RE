@@ -1,5 +1,5 @@
-from linkedin_profile_scraper_python.client import LinkedInClient
-from linkedin_profile_scraper_python.models import ProfileResult
+from client import LinkedInClient
+from models import ProfileResult
 
 
 class ProfileScraper:
@@ -8,4 +8,3 @@ class ProfileScraper:
 
     def scrape(self, linkedin_url: str) -> ProfileResult:
         return self.client.scrape_profile(linkedin_url)
-

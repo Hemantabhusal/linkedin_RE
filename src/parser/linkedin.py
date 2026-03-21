@@ -1,8 +1,8 @@
 import json
 from typing import Any, Dict, List, Optional
 
-from linkedin_profile_scraper_python.logging_setup import get_logger
-from linkedin_profile_scraper_python.models import ExperienceRecord, ProfileResult
+from logging_setup import get_logger
+from models import ExperienceRecord, ProfileResult
 
 
 LOGGER = get_logger(__name__)
@@ -115,10 +115,10 @@ def _payload_summary(payload: Dict[str, Any]) -> str:
     return json.dumps(summary, ensure_ascii=True)
 
 
-def parse_profile_payload(linkedin_url: str, payload: Dict[str, Any], log_payload_samples: bool) -> ProfileResult:
+def parse_profile_payload(linkedin_url: str, payload: Dict[str, Any], verbose_logging: bool) -> ProfileResult:
     profile = _extract_profile(payload)
     if not profile:
-        if log_payload_samples:
+        if verbose_logging:
             LOGGER.debug("Unexpected profile payload summary=%s", _payload_summary(payload))
         raise RuntimeError("No profile data returned for: %s" % linkedin_url)
 

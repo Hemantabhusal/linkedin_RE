@@ -13,8 +13,7 @@ linkedin_profile_scraper_python/
   requirements.txt
   pyproject.toml
   main.py
-  schema.sql
-  src/linkedin_profile_scraper_python/
+  src/
     client/
     config/
     logging_setup/
@@ -47,11 +46,7 @@ source .venv/bin/activate
 cp .env.example .env
 ```
 
-4. Create the MySQL schema:
-
-```bash
-mysql -u <DB_USER> -p <DB_NAME> < schema.sql
-```
+4. Ensure the MySQL schema already exists and matches the expected tables.
 
 5. Add pending LinkedIn profile URLs into the `profiles` table.
 
@@ -66,6 +61,5 @@ mysql -u <DB_USER> -p <DB_NAME> < schema.sql
 - Code is written to remain compatible with Python 3.9 syntax/features.
 - `curl_cffi` is used to keep the transport layer closer to browser-like TLS
   and HTTP behavior than plain `requests`.
-- Set `DEBUG_LINKEDIN=1` in `.env` to print request/response diagnostics while
-  developing.
-
+- Set `VERBOSE_LOGGING=1` in `.env` to enable request/response diagnostics
+  while developing.

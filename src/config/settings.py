@@ -30,11 +30,9 @@ class Settings(BaseSettings):
     request_timeout_seconds: float = Field(default=30.0, alias="REQUEST_TIMEOUT_SECONDS")
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
-    debug_linkedin: bool = Field(default=False, alias="DEBUG_LINKEDIN")
-    log_payload_samples: bool = Field(default=True, alias="LOG_PAYLOAD_SAMPLES")
+    verbose_logging: bool = Field(default=False, alias="VERBOSE_LOGGING")
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-

@@ -3,11 +3,11 @@ from typing import Dict, Optional
 
 from curl_cffi import requests as curl_requests
 
-from linkedin_profile_scraper_python.config import Settings
-from linkedin_profile_scraper_python.logging_setup import get_logger
-from linkedin_profile_scraper_python.models import ProfileResult
-from linkedin_profile_scraper_python.parser.linkedin import parse_profile_payload
-from linkedin_profile_scraper_python.utils import RetryableRateLimitError, SessionExpiredError
+from config import Settings
+from logging_setup import get_logger
+from models import ProfileResult
+from parser.linkedin import parse_profile_payload
+from utils import RetryableRateLimitError, SessionExpiredError
 
 
 LOGGER = get_logger(__name__)
@@ -115,7 +115,7 @@ class LinkedInClient:
         self._ensure_ok(response, "profile request")
         payload = response.json()
         LOGGER.debug("Profile response status=%s keys=%s", response.status_code, list(payload.keys())[:8])
-        return parse_profile_payload(linkedin_url, payload, self.settings.log_payload_samples)
+        return parse_profile_payload(linkedin_url, payload, self.settings.verbose_logging)
 
     @staticmethod
     def _extract_slug(linkedin_url: str) -> str:
@@ -126,4 +126,3 @@ class LinkedInClient:
         if not slug:
             raise ValueError("Invalid LinkedIn profile URL: %s" % linkedin_url)
         return slug
-

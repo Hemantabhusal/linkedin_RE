@@ -46,4 +46,3 @@ class ProfileResult(BaseModel):
     school_linkedin_id: Optional[str] = None
     school_linkedin_url: Optional[str] = None
     experiences: List[ExperienceRecord] = Field(default_factory=list)
-
