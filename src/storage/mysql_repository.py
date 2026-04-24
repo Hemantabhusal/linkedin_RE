@@ -1,5 +1,5 @@
 import json
-from typing import Iterable, List
+from typing import Iterable, List, Optional, Set
 
 import mysql.connector
 
@@ -18,6 +18,7 @@ class MySQLRepository:
             database=settings.db_name,
             autocommit=False,
         )
+        self._profile_result_columns = None  # type: Optional[Set[str]]
 
     def close(self) -> None:
         self.connection.close()
@@ -37,6 +38,17 @@ class MySQLRepository:
             )
             rows = cursor.fetchall()
         return [PendingProfileRow(**row) for row in rows]
+
+    def _get_profile_result_columns(self) -> Set[str]:
+        if self._profile_result_columns is not None:
+            return self._profile_result_columns
+
+        with self.connection.cursor(dictionary=True) as cursor:
+            cursor.execute("SHOW COLUMNS FROM profile_results")
+            rows = cursor.fetchall()
+
+        self._profile_result_columns = {row["Field"] for row in rows}
+        return self._profile_result_columns
 
     def mark_in_progress(self, profile_ids: Iterable[int]) -> None:
         ids = list(profile_ids)
@@ -68,72 +80,67 @@ class MySQLRepository:
             [experience.model_dump() for experience in result.experiences],
             ensure_ascii=False,
         )
+        educations_json = json.dumps([education.model_dump() for education in result.educations], ensure_ascii=False)
+        certifications_json = json.dumps(
+            [certification.model_dump() for certification in result.certifications],
+            ensure_ascii=False,
+        )
+        top_skills_json = json.dumps([skill.model_dump() for skill in result.top_skills], ensure_ascii=False)
+
+        values_by_column = {
+            "profile_id": profile_id,
+            "linkedin_url": result.linkedin_url,
+            "first_name": result.first_name,
+            "last_name": result.last_name,
+            "headline": result.headline,
+            "summary": result.summary,
+            "username": result.username,
+            "sales_nav_url": result.sales_nav_url,
+            "country_code": result.country_code,
+            "country": result.country,
+            "location_name": result.location_name,
+            "industry": result.industry,
+            "avatar_url": result.avatar_url,
+            "current_role": result.current_role,
+            "current_company": result.current_company,
+            "current_company_linkedin_url": result.current_company_linkedin_url,
+            "current_company_industry": result.current_company_industry,
+            "current_company_linkedin_id": result.current_company_linkedin_id,
+            "current_company_employee_range": result.current_company_employee_count_range,
+            "school": result.school,
+            "degree": result.degree,
+            "field_of_study": result.field_of_study,
+            "activities": result.activities,
+            "school_linkedin_id": result.school_linkedin_id,
+            "school_linkedin_url": result.school_linkedin_url,
+            "experiences": experiences_json,
+            "educations": educations_json,
+            "certifications": certifications_json,
+            "top_skills": top_skills_json,
+        }
+        available_columns = self._get_profile_result_columns()
+        columns = [column for column in values_by_column if column in available_columns]
+        quoted_columns = ["`%s`" % column if column == "current_role" else column for column in columns]
+        placeholders = ", ".join(["%s"] * len(columns))
+        update_columns = [column for column in columns if column not in ("profile_id",)]
+        update_assignments = ",\n              ".join(
+            "%s = VALUES(%s)"
+            % (
+                "`%s`" % column if column == "current_role" else column,
+                "`%s`" % column if column == "current_role" else column,
+            )
+            for column in update_columns
+        )
         sql = """
             INSERT INTO profile_results
-              (profile_id, linkedin_url, first_name, last_name, headline, summary, username,
-               sales_nav_url, country_code, country, location_name, industry, avatar_url,
-               `current_role`, current_company, current_company_linkedin_url,
-               current_company_industry, current_company_linkedin_id,
-               current_company_employee_range, school, degree, field_of_study,
-               activities, school_linkedin_id, school_linkedin_url, experiences)
+              (%s)
             VALUES
-              (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+              (%s)
             ON DUPLICATE KEY UPDATE
-              linkedin_url = VALUES(linkedin_url),
-              first_name = VALUES(first_name),
-              last_name = VALUES(last_name),
-              headline = VALUES(headline),
-              summary = VALUES(summary),
-              username = VALUES(username),
-              sales_nav_url = VALUES(sales_nav_url),
-              country_code = VALUES(country_code),
-              country = VALUES(country),
-              location_name = VALUES(location_name),
-              industry = VALUES(industry),
-              avatar_url = VALUES(avatar_url),
-              `current_role` = VALUES(`current_role`),
-              current_company = VALUES(current_company),
-              current_company_linkedin_url = VALUES(current_company_linkedin_url),
-              current_company_industry = VALUES(current_company_industry),
-              current_company_linkedin_id = VALUES(current_company_linkedin_id),
-              current_company_employee_range = VALUES(current_company_employee_range),
-              school = VALUES(school),
-              degree = VALUES(degree),
-              field_of_study = VALUES(field_of_study),
-              activities = VALUES(activities),
-              school_linkedin_id = VALUES(school_linkedin_id),
-              school_linkedin_url = VALUES(school_linkedin_url),
-              experiences = VALUES(experiences),
+              %s,
               scraped_at = CURRENT_TIMESTAMP
-        """
-        values = (
-            profile_id,
-            result.linkedin_url,
-            result.first_name,
-            result.last_name,
-            result.headline,
-            result.summary,
-            result.username,
-            result.sales_nav_url,
-            result.country_code,
-            result.country,
-            result.location_name,
-            result.industry,
-            result.avatar_url,
-            result.current_role,
-            result.current_company,
-            result.current_company_linkedin_url,
-            result.current_company_industry,
-            result.current_company_linkedin_id,
-            result.current_company_employee_count_range,
-            result.school,
-            result.degree,
-            result.field_of_study,
-            result.activities,
-            result.school_linkedin_id,
-            result.school_linkedin_url,
-            experiences_json,
-        )
+        """ % (", ".join(quoted_columns), placeholders, update_assignments)
+        values = tuple(values_by_column[column] for column in columns)
         with self.connection.cursor(dictionary=True) as cursor:
             cursor.execute(sql, values)
         self.connection.commit()

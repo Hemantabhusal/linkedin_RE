@@ -1,4 +1,11 @@
-from .profile import ExperienceRecord, ProfileResult
+from .profile import CertificationRecord, EducationRecord, ExperienceRecord, ProfileResult, SkillRecord
 from .storage import PendingProfileRow
 
-__all__ = ["ExperienceRecord", "PendingProfileRow", "ProfileResult"]
+__all__ = [
+    "CertificationRecord",
+    "EducationRecord",
+    "ExperienceRecord",
+    "PendingProfileRow",
+    "ProfileResult",
+    "SkillRecord",
+]

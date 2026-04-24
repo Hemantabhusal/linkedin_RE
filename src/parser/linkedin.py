@@ -2,7 +2,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 from logging_setup import get_logger
-from models import ExperienceRecord, ProfileResult
+from models import CertificationRecord, EducationRecord, ExperienceRecord, ProfileResult, SkillRecord
 
 
 LOGGER = get_logger(__name__)
@@ -21,6 +21,30 @@ def _format_date(date_value: Optional[Dict[str, Any]]) -> str:
     return str(year)
 
 
+def _date_range_start(value: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not value:
+        return None
+    if "start" in value or "end" in value:
+        return value.get("start")
+    return (value.get("timePeriod") or {}).get("startDate")
+
+
+def _date_range_end(value: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not value:
+        return None
+    if "start" in value or "end" in value:
+        return value.get("end")
+    return (value.get("timePeriod") or {}).get("endDate")
+
+
+def _format_range_start(record: Dict[str, Any]) -> str:
+    return _format_date(_date_range_start(record.get("dateRange") or record.get("timePeriod")))
+
+
+def _format_range_end(record: Dict[str, Any], default: str = "") -> str:
+    return _format_date(_date_range_end(record.get("dateRange") or record.get("timePeriod"))) or default
+
+
 def _as_text(value: Any) -> str:
     if value is None:
         return ""
@@ -35,6 +59,18 @@ def _as_text(value: Any) -> str:
                 return nested_value
         return ""
     return ""
+
+
+def _extract_skill_names(container: Optional[Dict[str, Any]]) -> List[str]:
+    skills = []
+    elements = (container or {}).get("elements") or []
+    for item in elements:
+        if not isinstance(item, dict):
+            continue
+        name = _as_text((item.get("skill") or {}).get("name")) or _as_text(item.get("name"))
+        if name:
+            skills.append(name)
+    return skills
 
 
 def _extract_experiences(profile_position_groups: Optional[Dict[str, Any]]) -> List[ExperienceRecord]:
@@ -52,11 +88,7 @@ def _extract_experiences(profile_position_groups: Optional[Dict[str, Any]]) -> L
 
         positions = ((group.get("profilePositionInPositionGroup") or {}).get("elements")) or []
         for position in positions:
-            skills = []
-            for skill in ((position.get("profileTaxonomySkills") or {}).get("elements")) or []:
-                name = ((skill.get("skill") or {}).get("name")) or skill.get("name")
-                if name:
-                    skills.append(name)
+            skills = _extract_skill_names(position.get("profileTaxonomySkills"))
 
             experiences.append(
                 ExperienceRecord(
@@ -64,12 +96,12 @@ def _extract_experiences(profile_position_groups: Optional[Dict[str, Any]]) -> L
                     company_linkedin_url=_as_text(company.get("url")),
                     company_linkedin_id=(company.get("entityUrn", "").split(":")[-1] if company.get("entityUrn") else ""),
                     company_size=company_size,
-                    company_tenure_start=_format_date((group.get("timePeriod") or {}).get("startDate")),
-                    company_tenure_end=_format_date((group.get("timePeriod") or {}).get("endDate")) or "Present",
+                    company_tenure_start=_format_range_start(group),
+                    company_tenure_end=_format_range_end(group, "Present"),
                     title=_as_text(position.get("title")),
                     employment_type=_as_text(position.get("employmentType")),
-                    start_date=_format_date((position.get("timePeriod") or {}).get("startDate")),
-                    end_date=_format_date((position.get("timePeriod") or {}).get("endDate")) or "Present",
+                    start_date=_format_range_start(position),
+                    end_date=_format_range_end(position, "Present"),
                     location=_as_text(position.get("geoLocationName")) or _as_text(position.get("locationName")),
                     location_type=(
                         "Remote"
@@ -81,6 +113,89 @@ def _extract_experiences(profile_position_groups: Optional[Dict[str, Any]]) -> L
                 )
             )
     return experiences
+
+
+def _extract_educations(profile_educations: Optional[Dict[str, Any]]) -> List[EducationRecord]:
+    educations = []
+    for education in (profile_educations or {}).get("elements") or []:
+        school = education.get("school") or {}
+        educations.append(
+            EducationRecord(
+                school=_as_text(school.get("name")) or _as_text(education.get("schoolName")),
+                degree=_as_text(education.get("degreeName")),
+                field_of_study=_as_text(education.get("fieldOfStudy")),
+                start_date=_format_range_start(education),
+                end_date=_format_range_end(education),
+                grade=_as_text(education.get("grade")),
+                activities=_as_text(education.get("activities")),
+                description=_as_text(education.get("description")),
+                school_linkedin_id=(education.get("schoolUrn", "").split(":")[-1] if education.get("schoolUrn") else ""),
+                school_linkedin_url=_as_text(school.get("url")),
+                skills=", ".join(_extract_skill_names(education.get("profileTaxonomySkills"))),
+            )
+        )
+    return educations
+
+
+def _extract_certifications(profile: Dict[str, Any]) -> List[CertificationRecord]:
+    certifications = []
+    possible_sections = [
+        profile.get("profileCertifications"),
+        profile.get("profileLicensesAndCertifications"),
+        profile.get("profileLicenseAndCertifications"),
+    ]
+    elements = []
+    for section in possible_sections:
+        if isinstance(section, dict):
+            elements.extend(section.get("elements") or [])
+
+    for certification in elements:
+        if not isinstance(certification, dict):
+            continue
+        certifications.append(
+            CertificationRecord(
+                name=_as_text(certification.get("name")),
+                authority=_as_text(certification.get("authority")) or _as_text((certification.get("company") or {}).get("name")),
+                issued_date=_format_range_start(certification) or _format_date(certification.get("issueDate")),
+                expiration_date=_format_range_end(certification) or _format_date(certification.get("expirationDate")),
+                credential_id=_as_text(certification.get("licenseNumber")) or _as_text(certification.get("credentialId")),
+                credential_url=_as_text(certification.get("url")) or _as_text(certification.get("credentialUrl")),
+                license_number=_as_text(certification.get("licenseNumber")),
+                skills=", ".join(_extract_skill_names(certification.get("profileTaxonomySkills"))),
+            )
+        )
+    return certifications
+
+
+def _extract_top_skills(profile: Dict[str, Any]) -> List[SkillRecord]:
+    skills = []
+    possible_sections = [
+        profile.get("profileTopSkills"),
+        profile.get("topSkills"),
+        profile.get("profileSkills"),
+    ]
+    elements = []
+    for section in possible_sections:
+        if isinstance(section, dict):
+            elements.extend(section.get("elements") or [])
+        elif isinstance(section, list):
+            elements.extend(section)
+
+    for item in elements:
+        if not isinstance(item, dict):
+            continue
+        name = _as_text((item.get("skill") or {}).get("name")) or _as_text(item.get("name"))
+        if not name:
+            continue
+        endorsement_count = item.get("endorsementCount")
+        skills.append(
+            SkillRecord(
+                name=name,
+                endorsement_count=endorsement_count if isinstance(endorsement_count, int) else None,
+                source=_as_text(item.get("source")),
+            )
+        )
+    return skills
 
 
 def _extract_profile(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -134,6 +249,9 @@ def parse_profile_payload(linkedin_url: str, payload: Dict[str, Any], verbose_lo
         current_company_range = "%s-%s" % (company_range.get("start", ""), company_range.get("end", ""))
 
     experiences = _extract_experiences(profile.get("profilePositionGroups"))
+    educations_all = _extract_educations(profile.get("profileEducations"))
+    certifications = _extract_certifications(profile)
+    top_skills = _extract_top_skills(profile)
     entity_urn = profile.get("entityUrn") or ""
 
     return ProfileResult(
@@ -164,11 +282,14 @@ def parse_profile_payload(linkedin_url: str, payload: Dict[str, Any], verbose_lo
         current_company_industry=None,
         current_company_linkedin_id=(company.get("entityUrn", "").split(":")[-1] if company.get("entityUrn") else None),
         current_company_employee_count_range=current_company_range,
-        school=_as_text((latest_education.get("school") or {}).get("name")) or None,
+        school=_as_text((latest_education.get("school") or {}).get("name")) or _as_text(latest_education.get("schoolName")) or None,
         degree=_as_text(latest_education.get("degreeName")) or None,
         field_of_study=_as_text(latest_education.get("fieldOfStudy")) or None,
         activities=_as_text(latest_education.get("activities")) or None,
         school_linkedin_id=(latest_education.get("schoolUrn", "").split(":")[-1] if latest_education.get("schoolUrn") else None),
         school_linkedin_url=_as_text((latest_education.get("school") or {}).get("url")) or None,
         experiences=experiences,
+        educations=educations_all,
+        certifications=certifications,
+        top_skills=top_skills,
     )

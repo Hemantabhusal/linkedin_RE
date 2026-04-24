@@ -56,6 +56,40 @@ cp .env.example .env
 ./.venv/bin/python main.py
 ```
 
+## Diagnostic Payload Dumps
+
+Use this command to capture the exact JSON returned by a Voyager endpoint:
+
+```bash
+./.venv/bin/python main.py dump-url "/voyager/api/..." dumps/section.json
+```
+
+Use this command to dump the main profile payload used by the worker:
+
+```bash
+./.venv/bin/python main.py dump-profile "https://www.linkedin.com/in/example/" dumps/profile.json
+```
+
+This is the preferred way to add robust parsers for LinkedIn "Show all"
+sections. Capture one payload each for:
+
+- full experience
+- full education
+- licenses and certifications
+- skills
+
+## Optional Rich Result Columns
+
+The worker always saves the existing scalar columns. If these optional JSON
+columns exist in `profile_results`, it will also save richer section data:
+
+```sql
+ALTER TABLE profile_results
+  ADD COLUMN educations JSON NULL,
+  ADD COLUMN certifications JSON NULL,
+  ADD COLUMN top_skills JSON NULL;
+```
+
 ## Notes
 
 - Code is written to remain compatible with Python 3.9 syntax/features.

@@ -1,5 +1,5 @@
 from http.cookies import SimpleCookie
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from curl_cffi import requests as curl_requests
 
@@ -102,6 +102,10 @@ class LinkedInClient:
         LOGGER.debug("Session verification payload keys=%s", list(response.json().keys())[:8])
 
     def scrape_profile(self, linkedin_url: str) -> ProfileResult:
+        payload = self.get_profile_payload(linkedin_url)
+        return parse_profile_payload(linkedin_url, payload, self.settings.verbose_logging)
+
+    def get_profile_payload(self, linkedin_url: str) -> Dict[str, Any]:
         slug = self._extract_slug(linkedin_url)
         api_url = (
             "%s/voyager/api/identity/dash/profiles"
@@ -115,7 +119,18 @@ class LinkedInClient:
         self._ensure_ok(response, "profile request")
         payload = response.json()
         LOGGER.debug("Profile response status=%s keys=%s", response.status_code, list(payload.keys())[:8])
-        return parse_profile_payload(linkedin_url, payload, self.settings.verbose_logging)
+        return payload
+
+    def get_json(self, url: str, context: str = "voyager request") -> Dict[str, Any]:
+        if url.startswith("/"):
+            url = "%s%s" % (LINKEDIN_BASE, url)
+
+        LOGGER.debug("%s url=%s", context, url)
+        response = self._session.get(url, headers=self._headers)
+        self._ensure_ok(response, context)
+        payload = response.json()
+        LOGGER.debug("%s response status=%s keys=%s", context, response.status_code, list(payload.keys())[:8])
+        return payload
 
     @staticmethod
     def _extract_slug(linkedin_url: str) -> str:
